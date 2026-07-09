@@ -5,6 +5,24 @@ import type { ResumeCompareResult, SuggestionItem } from '../types/suggestions';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export class ApiService {
+  private static async handleError(res: Response, defaultMessage: string): Promise<never> {
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        const err = await res.json();
+        throw new Error(err.error || defaultMessage);
+      } catch (e: any) {
+        throw new Error(e.message || defaultMessage);
+      }
+    }
+    
+    // If response is HTML or text (e.g. Render 502/504 Gateway pages)
+    const text = await res.text();
+    // Simple HTML tags removal to get a readable string
+    const cleanText = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    throw new Error(cleanText.substring(0, 150) || `Server error (${res.status}): ${defaultMessage}`);
+  }
+
   /**
    * Request structured extraction of Job Description
    */
@@ -16,8 +34,7 @@ export class ApiService {
     });
     
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to analyze Job Description');
+      await this.handleError(res, 'Failed to analyze Job Description');
     }
     
     return await res.json();
@@ -34,8 +51,7 @@ export class ApiService {
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to compare resume');
+      await this.handleError(res, 'Failed to compare resume');
     }
 
     return await res.json();
@@ -52,8 +68,7 @@ export class ApiService {
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to apply suggestions');
+      await this.handleError(res, 'Failed to apply suggestions');
     }
 
     const data = await res.json();
@@ -66,8 +81,7 @@ export class ApiService {
   static async listResumes(): Promise<Array<{ _id: string; fileName: string; fullName: string; updatedAt: string }>> {
     const res = await fetch(`${API_BASE}/resumes`);
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to list resumes');
+      await this.handleError(res, 'Failed to list resumes');
     }
     return await res.json();
   }
@@ -78,8 +92,7 @@ export class ApiService {
   static async getResume(id: string): Promise<ResumeJSON> {
     const res = await fetch(`${API_BASE}/resumes/${id}`);
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to fetch resume');
+      await this.handleError(res, 'Failed to fetch resume');
     }
     return await res.json();
   }
@@ -94,8 +107,7 @@ export class ApiService {
       body: JSON.stringify(resume)
     });
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to update resume');
+      await this.handleError(res, 'Failed to update resume');
     }
     const data = await res.json();
     return data.updatedResume;
@@ -109,8 +121,7 @@ export class ApiService {
       method: 'DELETE'
     });
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to delete resume');
+      await this.handleError(res, 'Failed to delete resume');
     }
   }
 
@@ -125,7 +136,7 @@ export class ApiService {
     });
 
     if (!res.ok) {
-      throw new Error('Failed to generate DOCX');
+      await this.handleError(res, 'Failed to generate DOCX');
     }
 
     return await res.blob();
@@ -142,7 +153,7 @@ export class ApiService {
     });
 
     if (!res.ok) {
-      throw new Error('Failed to generate PDF');
+      await this.handleError(res, 'Failed to generate PDF');
     }
 
     return await res.blob();
@@ -164,8 +175,7 @@ export class ApiService {
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to import and parse PDF resume');
+      await this.handleError(res, 'Failed to import and parse PDF resume');
     }
 
     return await res.json();
