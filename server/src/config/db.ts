@@ -12,7 +12,7 @@ export async function connectDB(): Promise<void> {
     await mongoose.connect(uri);
     console.log('MongoDB successfully connected.');
   } catch (error) {
-    console.error('Failed to connect to MongoDB:', error);
-    process.exit(1);
+    console.error('Failed to connect to MongoDB on startup:', error);
+    // Do not call process.exit(1) so that the Express server stays running and can serve health checks/errors
   }
 }
