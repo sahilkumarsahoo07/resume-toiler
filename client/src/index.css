@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+:root {
+  /* Light mode colors (RGB formats for tailwind opacity modifiers) */
+  --background: 248, 250, 252; /* slate-50 */
+  --foreground: 15, 23, 42; /* slate-900 */
+  --border: 226, 232, 240; /* slate-200 */
+  --input: 255, 255, 255; /* white */
+  --ring: 99, 102, 241; /* indigo-500 */
+  
+  --primary: 99, 102, 241; /* indigo-500 */
+  --primary-hover: 79, 70, 229; /* indigo-600 */
+  --primary-foreground: 255, 255, 255;
+
+  --secondary: 241, 245, 249; /* slate-100 */
+  --secondary-hover: 226, 232, 240; /* slate-200 */
+  --secondary-foreground: 15, 23, 42;
+
+  --card: 255, 255, 255;
+  --card-foreground: 15, 23, 42;
+
+  --muted: 100, 116, 139; /* slate-500 */
+  --muted-foreground: 100, 116, 139;
+
+  --accent: 245, 243, 255; /* violet-50 */
+  --accent-foreground: 109, 40, 217; /* violet-700 */
+
+  --success: 16, 185, 129; /* emerald-500 */
+  --warning: 245, 158, 11; /* amber-500 */
+  --error: 239, 68, 68; /* red-500 */
+}
+
+.dark {
+  /* Dark mode colors (RGB formats) */
+  --background: 11, 15, 26; /* deep rich dark slate */
+  --foreground: 248, 250, 252; /* slate-50 */
+  --border: 30, 41, 59; /* slate-800 */
+  --input: 17, 24, 39; /* slate-900 */
+  --ring: 129, 140, 248; /* indigo-400 */
+  
+  --primary: 129, 140, 248; /* indigo-400 */
+  --primary-hover: 99, 102, 241; /* indigo-500 */
+  --primary-foreground: 11, 15, 26;
+
+  --secondary: 30, 41, 59; /* slate-800 */
+  --secondary-hover: 51, 65, 85; /* slate-700 */
+  --secondary-foreground: 248, 250, 252;
+
+  --card: 17, 24, 39; /* slate-900 */
+  --card-foreground: 248, 250, 252;
+
+  --muted: 148, 163, 184; /* slate-400 */
+  --muted-foreground: 148, 163, 184;
+
+  --accent: 30, 27, 75; /* indigo-950 */
+  --accent-foreground: 196, 181, 253; /* violet-300 */
+
+  --success: 52, 211, 153; /* emerald-400 */
+  --warning: 251, 191, 36; /* amber-400 */
+  --error: 248, 113, 113; /* red-400 */
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: rgba(var(--background), 1);
+  color: rgba(var(--foreground), 1);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', sans-serif;
+}
+
+/* Glassmorphism scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--muted), 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--muted), 0.4);
+}
+
+/* Resume A4 Page Simulation styling */
+.resume-sheet {
+  background: white;
+  color: black;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 210mm;
+  min-height: 297mm;
+  padding: 20mm;
+  margin: 0 auto;
+  font-family: 'Times New Roman', Times, serif;
+  box-sizing: border-box;
+}
+
+/* CSS Print Styles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .resume-sheet {
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+  }
+}
