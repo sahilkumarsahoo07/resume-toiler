@@ -2,7 +2,7 @@ import type { ResumeJSON } from '../types/resume';
 import type { JDAnalysis } from '../types/jd';
 import type { ResumeCompareResult, SuggestionItem } from '../types/suggestions';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export class ApiService {
   /**
