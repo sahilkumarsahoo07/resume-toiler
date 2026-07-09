@@ -1,8 +1,27 @@
-import { openai, isMockMode, aiModel } from '../config/openai';
+import { getAIClient, isMockMode } from '../config/openai';
 import { JDAnalysis } from '../types/jd';
 import { ResumeJSON } from '../types/resume';
 import { ResumeCompareResult, SuggestionItem } from '../types/suggestions';
 import { defaultResume } from '../utils/jsonTemplates';
+
+/**
+ * Safely parses JSON from AI responses, removing markdown code blocks if present.
+ */
+function safelyParseJSON<T>(content: string): T {
+  try {
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith('```')) {
+      // Remove first line (e.g. ```json)
+      cleanContent = cleanContent.replace(/^```[a-z]*\n/, '');
+      // Remove last line (```)
+      cleanContent = cleanContent.replace(/\n```$/, '');
+    }
+    return JSON.parse(cleanContent.trim()) as T;
+  } catch (error) {
+    console.error('JSON Parsing Failed:', content);
+    throw error;
+  }
+}
 
 /**
  * AI Service for Job Description extraction, Resume comparison, and merging suggestions.
@@ -12,14 +31,15 @@ export class OpenAIService {
   /**
    * Step 1: Extract Job Description details
    */
-  static async analyzeJD(jdText: string): Promise<JDAnalysis> {
-    if (isMockMode || !openai) {
+  static async analyzeJD(jdText: string, reqModelId?: string): Promise<JDAnalysis> {
+    const { client, model } = getAIClient(reqModelId);
+    if (isMockMode || !client) {
       return this.mockAnalyzeJD(jdText);
     }
 
     try {
-      const response = await openai.chat.completions.create({
-        model: aiModel,
+      const response = await client.chat.completions.create({
+        model,
         response_format: { type: 'json_object' },
         messages: [
           {
@@ -49,7 +69,7 @@ Return only a JSON object matching this schema:
       });
 
       const content = response.choices[0]?.message?.content || '{}';
-      return JSON.parse(content) as JDAnalysis;
+      return safelyParseJSON<JDAnalysis>(content);
     } catch (error: any) {
       console.error('Error analyzing JD with OpenAI:', error);
       if (error?.status === 429) {
@@ -63,14 +83,15 @@ Return only a JSON object matching this schema:
   /**
    * Step 2: Compare Resume JSON with JD Analysis and generate suggestions
    */
-  static async compareResumeWithJD(resume: ResumeJSON, jdAnalysis: JDAnalysis): Promise<ResumeCompareResult> {
-    if (isMockMode || !openai) {
+  static async compareResumeWithJD(resume: ResumeJSON, jdAnalysis: JDAnalysis, reqModelId?: string): Promise<ResumeCompareResult> {
+    const { client, model } = getAIClient(reqModelId);
+    if (isMockMode || !client) {
       return this.mockCompare(resume, jdAnalysis);
     }
 
     try {
-      const response = await openai.chat.completions.create({
-        model: aiModel,
+      const response = await client.chat.completions.create({
+        model,
         response_format: { type: 'json_object' },
         messages: [
           {
@@ -81,7 +102,7 @@ Generate match metrics and optimization suggestions.
 CRITICAL RULES:
 1. NEVER fabricate fake work experiences, companies, job duration, or certifications.
 2. Suggestions must be optimization actions on existing content, EXCEPT for missing skills required by the job description.
-3. For missing skills, you SHOULD generate a suggestion with category 'skills' that proposes adding those missing skills to the appropriate lists in the resume's 'skills' object (e.g., languages, frameworks, tools, databases, cloud, softSkills).
+3. For missing skills, you MUST generate a suggestion with category 'skills' that proposes adding those missing skills. For this suggestion, the 'proposedText' field MUST contain a clean, comma-separated list of the specific missing skills to add (e.g. "Docker, Kubernetes, AWS"), and the 'explanation' field should describe what skills are being added and why.
 4. Do NOT fabricate metrics (e.g., do not suggest changing "improved performance" to "improved performance by 45%" unless "45%" or a similar number was already specified in the source text).
 5. Each suggestion targeting work experience or project bullets MUST contain 'originalText' (the exact text in the resume) and 'proposedText' (the optimized, tailored replacement line).
 6. Generate an id (e.g. 'sugg-1') for each suggestion.
@@ -116,7 +137,7 @@ Return only a JSON object matching this schema:
       });
 
       const content = response.choices[0]?.message?.content || '{}';
-      return JSON.parse(content) as ResumeCompareResult;
+      return safelyParseJSON<ResumeCompareResult>(content);
     } catch (error: any) {
       console.error('Error comparing resume with OpenAI:', error);
       if (error?.status === 429) {
@@ -130,26 +151,38 @@ Return only a JSON object matching this schema:
   /**
    * Step 4: Apply selected suggestions using AI for stylistic flow while maintaining rules
    */
-  static async applySuggestions(resume: ResumeJSON, selectedSuggestions: SuggestionItem[]): Promise<ResumeJSON> {
-    if (isMockMode || !openai) {
+  static async applySuggestions(resume: ResumeJSON, selectedSuggestions: SuggestionItem[], reqModelId?: string): Promise<ResumeJSON> {
+    const { client, model } = getAIClient(reqModelId);
+    if (isMockMode || !client) {
       return this.programmaticMerge(resume, selectedSuggestions);
     }
 
     try {
-      const response = await openai.chat.completions.create({
-        model: aiModel,
+      const response = await client.chat.completions.create({
+        model,
         response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
-            content: `You are a resume data compiler. You will receive a Resume JSON and a list of specific SuggestionItems (which contain proposedText, targetId, and category fields).
+            content: `You are a resume data compiler. You will receive a Resume JSON and a list of specific SuggestionItems (which contain proposedText, targetId, category, and explanation fields).
 Your task is to merge these suggestions directly into the Resume JSON.
 
 CRITICAL RULES:
-1. Only modify fields targeted by the selected suggestions. If a suggestion is to add missing skills to the skills section, add them to the appropriate list in the 'skills' object of the Resume JSON.
-2. Under no circumstances should you fabricate any experience, company, year, school, or credentials. Adding missing skills to the skills lists as requested by the suggestions is permitted.
-3. Keep formatting clean and maintain the JSON structure perfectly.
-4. Output the updated Resume JSON matching the input schema. No markdown formatting outside of JSON.`
+1. Only modify fields targeted by the selected suggestions.
+2. If a suggestion has category 'skills', you MUST add the missing skills mentioned in the suggestion (from its 'proposedText' or 'explanation') into the appropriate arrays under the 'skills' object of the Resume JSON.
+   - For example:
+     - Cloud platforms (like 'AWS', 'Azure', 'GCP', 'Cloud') go to 'skills.cloud'.
+     - Databases (like 'MongoDB', 'PostgreSQL', 'SQL', 'Redis') go to 'skills.databases'.
+     - Languages (like 'TypeScript', 'Python', 'Go', 'Rust', 'JavaScript') go to 'skills.languages'.
+     - Frameworks/Libraries (like 'React', 'Angular', 'Express', 'Django', 'Next.js') go to 'skills.frameworks'.
+     - Devops/Tools (like 'Docker', 'Kubernetes', 'Git', 'Webpack') go to 'skills.tools'.
+     - Soft skills go to 'skills.softSkills'.
+     - If you are unsure which category a skill belongs to, default to adding it to 'skills.tools'.
+   - Avoid duplicate skills in the lists. Ensure they are added as clean strings.
+   - If a specific skills array (like 'databases' or 'cloud') does not exist under the 'skills' object, initialize it as an empty array before adding the skills.
+3. Under no circumstances should you fabricate any experience, company, year, school, or credentials. Adding missing skills to the skills lists as requested by the suggestions is permitted and required.
+4. Keep formatting clean and maintain the JSON structure perfectly.
+5. Output the updated Resume JSON matching the input schema. No markdown formatting outside of JSON.`
           },
           {
             role: 'user',
@@ -160,7 +193,7 @@ CRITICAL RULES:
       });
 
       const content = response.choices[0]?.message?.content || '{}';
-      return JSON.parse(content) as ResumeJSON;
+      return safelyParseJSON<ResumeJSON>(content);
     } catch (error: any) {
       console.error('Error applying suggestions with OpenAI:', error);
       if (error?.status === 429) {
@@ -174,14 +207,15 @@ CRITICAL RULES:
   /**
    * Parse unstructured resume text into a structured JSON model using AI
    */
-  static async parseResumeText(resumeText: string): Promise<ResumeJSON> {
-    if (isMockMode || !openai) {
+  static async parseResumeText(resumeText: string, reqModelId?: string): Promise<ResumeJSON> {
+    const { client, model } = getAIClient(reqModelId);
+    if (isMockMode || !client) {
       return defaultResume;
     }
 
     try {
-      const response = await openai.chat.completions.create({
-        model: aiModel,
+      const response = await client.chat.completions.create({
+        model,
         response_format: { type: 'json_object' },
         messages: [
           {
@@ -257,7 +291,7 @@ Return only a JSON object matching this schema:
       });
 
       const content = response.choices[0]?.message?.content || '{}';
-      return JSON.parse(content) as ResumeJSON;
+      return safelyParseJSON<ResumeJSON>(content);
     } catch (error: any) {
       console.error('Error parsing resume text with AI:', error);
       if (error?.status === 429) {
@@ -500,10 +534,77 @@ Return only a JSON object matching this schema:
         }
       }
 
-      // 4. Merge Skills (reordering)
+      // 4. Merge Skills (reordering and adding missing skills)
       if (sugg.category === 'skills') {
-        // e.g. reorder languages and frameworks to put core languages first.
-        // We'll move React/TypeScript/Node.js to the front of their respective lists.
+        // 4a. Add missing skills programmatically from proposedText or explanation
+        const textToSearch = `${sugg.proposedText || ''} ${sugg.explanation || ''}`;
+        
+        // Define common skill keywords for automatic categorization fallback
+        const databaseKeywords = ['mongodb', 'postgresql', 'mysql', 'redis', 'sql', 'nosql', 'oracle', 'sqlite', 'cassandra'];
+        const cloudKeywords = ['aws', 'azure', 'gcp', 'google cloud', 'cloud', 'aws s3', 'ec2', 'lambda', 'terraform'];
+        const languageKeywords = ['javascript', 'typescript', 'python', 'java', 'c++', 'c#', 'ruby', 'go', 'rust', 'php', 'html', 'css', 'bash', 'shell'];
+        const frameworkKeywords = ['react', 'angular', 'vue', 'next.js', 'nextjs', 'express', 'django', 'flask', 'spring', 'laravel', 'nest.js', 'nestjs', 'node.js', 'nodejs'];
+        
+        const words = textToSearch.split(/[\s,./()]+/).map(w => w.trim().toLowerCase()).filter(Boolean);
+        const uniqueWords = Array.from(new Set(words));
+        
+        let explicitSkills: string[] = [];
+        if (sugg.proposedText && sugg.proposedText.includes(',')) {
+          // If proposedText is a comma-separated list, use it directly
+          explicitSkills = sugg.proposedText.split(',').map(s => s.trim()).filter(Boolean);
+        } else {
+          // Fallback: extract matching keywords from text
+          uniqueWords.forEach(w => {
+            let matchedSkill: string | null = null;
+            if (databaseKeywords.includes(w)) {
+              matchedSkill = w === 'mongodb' ? 'MongoDB' : w === 'postgresql' ? 'PostgreSQL' : w === 'mysql' ? 'MySQL' : w === 'redis' ? 'Redis' : w.toUpperCase();
+            } else if (cloudKeywords.includes(w)) {
+              matchedSkill = w === 'aws' ? 'AWS' : w === 'azure' ? 'Azure' : w === 'gcp' ? 'GCP' : w === 'terraform' ? 'Terraform' : w;
+            } else if (languageKeywords.includes(w)) {
+              matchedSkill = w === 'javascript' ? 'JavaScript' : w === 'typescript' ? 'TypeScript' : w === 'python' ? 'Python' : w === 'java' ? 'Java' : w === 'go' ? 'Go' : w === 'rust' ? 'Rust' : w;
+            } else if (frameworkKeywords.includes(w)) {
+              matchedSkill = w === 'react' ? 'React' : w === 'angular' ? 'Angular' : w === 'vue' ? 'Vue' : w === 'next.js' || w === 'nextjs' ? 'Next.js' : w === 'express' ? 'Express' : w === 'django' ? 'Django' : w === 'node.js' || w === 'nodejs' ? 'Node.js' : w;
+            }
+            
+            if (matchedSkill && !explicitSkills.includes(matchedSkill)) {
+              explicitSkills.push(matchedSkill);
+            }
+          });
+        }
+        
+        // Distribute parsed skills to appropriate sections
+        explicitSkills.forEach(skill => {
+          const lowerSkill = skill.toLowerCase();
+          let bucket: string[] = updated.skills.tools; // default fallback bucket
+          
+          if (databaseKeywords.includes(lowerSkill)) {
+            if (!updated.skills.databases) updated.skills.databases = [];
+            bucket = updated.skills.databases;
+          } else if (cloudKeywords.includes(lowerSkill)) {
+            if (!updated.skills.cloud) updated.skills.cloud = [];
+            bucket = updated.skills.cloud;
+          } else if (languageKeywords.includes(lowerSkill)) {
+            bucket = updated.skills.languages;
+          } else if (frameworkKeywords.includes(lowerSkill)) {
+            bucket = updated.skills.frameworks;
+          }
+          
+          // Only add if not already in the list
+          const alreadyExists = [
+            ...updated.skills.languages,
+            ...updated.skills.frameworks,
+            ...updated.skills.tools,
+            ...(updated.skills.databases || []),
+            ...(updated.skills.cloud || []),
+            ...updated.skills.softSkills
+          ].some(s => s.toLowerCase() === lowerSkill);
+          
+          if (!alreadyExists) {
+            bucket.push(skill);
+          }
+        });
+
+        // 4b. Reorder languages and frameworks to prioritize core keywords
         const prioritize = ["React", "TypeScript", "Node.js", "Next.js", "Python"];
         
         updated.skills.languages.sort((a, b) => {

@@ -18,6 +18,7 @@ interface ResumeStore {
   activeResumeId: string | null;
   storedResumes: Array<{ _id: string; fileName: string; fullName: string; updatedAt: string }>;
   isFetchingStored: boolean;
+  selectedModel: string;
   
   // Loading & Error States
   isAnalyzingJD: boolean;
@@ -33,6 +34,7 @@ interface ResumeStore {
   setResume: (resume: ResumeJSON) => void;
   setJDText: (text: string) => void;
   clearJD: () => void;
+  setSelectedModel: (model: string) => void;
   
   // Routing & DB Actions
   setView: (view: 'dashboard' | 'editor', resumeId?: string | null) => void;
@@ -68,6 +70,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
   activeResumeId: null,
   storedResumes: [],
   isFetchingStored: false,
+  selectedModel: 'poolside/laguna-m.1:free',
   
   isAnalyzingJD: false,
   isComparing: false,
@@ -95,6 +98,8 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
   setJDText: (text) => set({ jdText: text }),
 
   clearJD: () => set({ jdText: '', jdAnalysis: null, comparison: null, selectedSuggestions: {} }),
+  
+  setSelectedModel: (model) => set({ selectedModel: model }),
 
   // Routing & DB Actions Implementation
   setView: (view, resumeId = null) => {
@@ -175,12 +180,12 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
   },
 
   analyzeJD: async () => {
-    const { jdText } = get();
+    const { jdText, selectedModel } = get();
     if (!jdText.trim()) return;
 
     set({ isAnalyzingJD: true, error: null });
     try {
-      const analysis = await ApiService.analyzeJD(jdText);
+      const analysis = await ApiService.analyzeJD(jdText, selectedModel);
       set({ jdAnalysis: analysis, isAnalyzingJD: false });
       
       // Auto-run comparison after JD analysis completes to minimize clicks
@@ -191,12 +196,12 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
   },
 
   compareResumeWithJD: async () => {
-    const { resume, jdAnalysis } = get();
+    const { resume, jdAnalysis, selectedModel } = get();
     if (!jdAnalysis) return;
 
     set({ isComparing: true, error: null });
     try {
-      const comparison = await ApiService.compareResume(resume, jdAnalysis);
+      const comparison = await ApiService.compareResume(resume, jdAnalysis, selectedModel);
       
       // Initialize all suggestions as selected (checked) by default for ease of use
       const initialSelection: Record<string, boolean> = {};
@@ -236,7 +241,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
   },
 
   applySelectedSuggestions: async () => {
-    const { resume, comparison, selectedSuggestions } = get();
+    const { resume, comparison, selectedSuggestions, selectedModel } = get();
     if (!comparison) return;
 
     // Filter to only chosen suggestions
@@ -245,7 +250,7 @@ export const useResumeStore = create<ResumeStore>((set, get) => ({
 
     set({ isApplyingChanges: true, error: null });
     try {
-      const updatedResume = await ApiService.applySuggestions(resume, chosenSuggestions);
+      const updatedResume = await ApiService.applySuggestions(resume, chosenSuggestions, selectedModel);
       
       // Commit updated resume to state & history stack
       get().setResume(updatedResume);

@@ -8,11 +8,11 @@ export class ApiService {
   /**
    * Request structured extraction of Job Description
    */
-  static async analyzeJD(jdText: string): Promise<JDAnalysis> {
+  static async analyzeJD(jdText: string, modelId?: string): Promise<JDAnalysis> {
     const res = await fetch(`${API_BASE}/analyze-jd`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jdText })
+      body: JSON.stringify({ jdText, modelId })
     });
     
     if (!res.ok) {
@@ -26,11 +26,11 @@ export class ApiService {
   /**
    * Compare Resume JSON with JD Analysis
    */
-  static async compareResume(resume: ResumeJSON, jdAnalysis: JDAnalysis): Promise<ResumeCompareResult> {
+  static async compareResume(resume: ResumeJSON, jdAnalysis: JDAnalysis, modelId?: string): Promise<ResumeCompareResult> {
     const res = await fetch(`${API_BASE}/compare`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resume, jdAnalysis })
+      body: JSON.stringify({ resume, jdAnalysis, modelId })
     });
 
     if (!res.ok) {
@@ -44,11 +44,11 @@ export class ApiService {
   /**
    * Merge selected suggestions into Resume JSON
    */
-  static async applySuggestions(resume: ResumeJSON, selectedSuggestions: SuggestionItem[]): Promise<ResumeJSON> {
+  static async applySuggestions(resume: ResumeJSON, selectedSuggestions: SuggestionItem[], modelId?: string): Promise<ResumeJSON> {
     const res = await fetch(`${API_BASE}/apply-suggestions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resume, selectedSuggestions })
+      body: JSON.stringify({ resume, selectedSuggestions, modelId })
     });
 
     if (!res.ok) {
@@ -132,11 +132,31 @@ export class ApiService {
   }
 
   /**
+   * Export resume as PDF binary Blob
+   */
+  static async exportPdf(resume: ResumeJSON): Promise<Blob> {
+    const res = await fetch(`${API_BASE}/export/pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(resume)
+    });
+
+    if (!res.ok) {
+      throw new Error('Failed to generate PDF');
+    }
+
+    return await res.blob();
+  }
+
+  /**
    * Upload PDF resume to parse it into structured JSON
    */
-  static async importResume(file: File): Promise<ResumeJSON> {
+  static async importResume(file: File, modelId?: string): Promise<ResumeJSON> {
     const formData = new FormData();
     formData.append('file', file);
+    if (modelId) {
+      formData.append('modelId', modelId);
+    }
 
     const res = await fetch(`${API_BASE}/import-resume`, {
       method: 'POST',

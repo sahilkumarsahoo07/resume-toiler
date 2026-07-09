@@ -88,15 +88,18 @@ export const SuggestionItemSchema = z.object({
 
 // API endpoint schemas
 export const AnalyzeJDRequestSchema = z.object({
-  jdText: z.string().min(10, "Job description must be at least 10 characters long")
+  jdText: z.string().min(10, "Job description must be at least 10 characters long"),
+  modelId: z.string().optional()
 });
 
 export const CompareRequestSchema = z.object({
   resume: ResumeJSONSchema,
-  jdAnalysis: JDAnalysisSchema
+  jdAnalysis: JDAnalysisSchema,
+  modelId: z.string().optional()
 });
 
 export const ApplySuggestionsRequestSchema = z.object({
   resume: ResumeJSONSchema,
-  selectedSuggestions: z.array(SuggestionItemSchema)
+  selectedSuggestions: z.array(SuggestionItemSchema),
+  modelId: z.string().optional()
 });

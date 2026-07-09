@@ -13,9 +13,6 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-// @ts-ignore
-import html2pdf from 'html2pdf.js';
-
 export const RightPanel: React.FC = () => {
   const { resume, setResume } = useResumeStore();
   const [zoom, setZoom] = useState<number>(85); // 85% default fits nicely in 1080p width
@@ -38,32 +35,24 @@ export const RightPanel: React.FC = () => {
     setZoom(Number(e.target.value));
   };
 
-  const handleDownloadPDF = () => {
-    const element = document.querySelector('.resume-sheet') as HTMLElement;
-    if (!element) return;
-    
+  const handleDownloadPDF = async () => {
     setIsExportingPdf(true);
-    const opt = {
-      margin:       0,
-      filename:     `${resume.personalInfo.fullName.replace(/\s+/g, '_')}_Resume.pdf`,
-      image:        { type: 'jpeg' as const, quality: 0.98 },
-      html2canvas:  { scale: 2.5, useCORS: true, logging: false },
-      jsPDF:        { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
-    };
-
-    html2pdf()
-      .set(opt)
-      .from(element)
-      .save()
-      .then(() => {
-        setIsExportingPdf(false);
-      })
-      .catch((err: any) => {
-        console.error(err);
-        setIsExportingPdf(false);
-        // Fallback to print
-        window.print();
-      });
+    try {
+      const blob = await ApiService.exportPdf(resume);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${resume.personalInfo.fullName.replace(/\s+/g, '_')}_Resume.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Failed to export PDF:', error);
+      alert(`Failed to download PDF: ${error.message || error}`);
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const handleDownloadDocx = async () => {
@@ -109,7 +98,7 @@ export const RightPanel: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-100 dark:bg-slate-900/40 no-print">
+    <div className="flex flex-col h-full bg-slate-100 dark:bg-slate-900/40">
       
       {/* Hidden File Input */}
       <input 
@@ -121,7 +110,7 @@ export const RightPanel: React.FC = () => {
       />
 
       {/* Toolbar */}
-      <div className="bg-card border-b border-border px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+      <div className="bg-card border-b border-border px-5 py-3 flex items-center justify-between gap-4 flex-wrap no-print">
         {/* Title */}
         <div className="flex items-center gap-2">
           <Printer className="h-5 w-5 text-indigo-500" />

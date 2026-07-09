@@ -3,6 +3,7 @@ import multer from 'multer';
 import { PDFParse } from 'pdf-parse';
 import { OpenAIService } from '../services/openai.service';
 import { DocxService } from '../services/docx.service';
+import { PdfService } from '../services/pdf.service';
 import { Resume } from '../models/resume.model';
 import { 
   AnalyzeJDRequestSchema, 
@@ -82,7 +83,7 @@ const upload = multer({ limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit
 apiRouter.post('/analyze-jd', async (req, res) => {
   try {
     const body = AnalyzeJDRequestSchema.parse(req.body);
-    const analysis = await OpenAIService.analyzeJD(body.jdText);
+    const analysis = await OpenAIService.analyzeJD(body.jdText, body.modelId);
     res.json(analysis);
   } catch (error: any) {
     console.error('Error in /analyze-jd route:', error);
@@ -164,7 +165,7 @@ apiRouter.post('/analyze-jd', async (req, res) => {
 apiRouter.post('/compare', async (req, res) => {
   try {
     const body = CompareRequestSchema.parse(req.body);
-    const comparison = await OpenAIService.compareResumeWithJD(body.resume, body.jdAnalysis);
+    const comparison = await OpenAIService.compareResumeWithJD(body.resume, body.jdAnalysis, body.modelId);
     res.json(comparison);
   } catch (error: any) {
     console.error('Error in /compare route:', error);
@@ -213,7 +214,7 @@ apiRouter.post('/compare', async (req, res) => {
 apiRouter.post('/apply-suggestions', async (req, res) => {
   try {
     const body = ApplySuggestionsRequestSchema.parse(req.body);
-    const updated = await OpenAIService.applySuggestions(body.resume, body.selectedSuggestions);
+    const updated = await OpenAIService.applySuggestions(body.resume, body.selectedSuggestions, body.modelId);
     
     if (body.resume._id) {
       await Resume.findByIdAndUpdate(body.resume._id, {
@@ -372,6 +373,45 @@ apiRouter.post('/export/docx', async (req, res) => {
 
 /**
  * @openapi
+ * /api/export/pdf:
+ *   post:
+ *     summary: Export Resume to PDF
+ *     description: Converts Resume JSON into a download stream for PDF.
+ *     tags: [Export Services]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Structured Resume JSON
+ *     responses:
+ *       200:
+ *         description: PDF generated successfully.
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         description: Invalid resume schema.
+ */
+apiRouter.post('/export/pdf', async (req, res) => {
+  try {
+    const resume = ResumeJSONSchema.parse(req.body);
+    const buffer = await PdfService.generate(resume);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="Tailored_Resume.pdf"');
+    res.send(buffer);
+  } catch (error: any) {
+    console.error('Error in /export/pdf route:', error);
+    res.status(400).json({ error: error.errors ? error.errors : error.message });
+  }
+});
+
+/**
+ * @openapi
  * /api/import-resume:
  *   post:
  *     summary: Import Resume from PDF
@@ -413,7 +453,8 @@ apiRouter.post('/import-resume', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Failed to extract text from PDF resume' });
     }
 
-    const parsedJSON = await OpenAIService.parseResumeText(resumeText);
+    const modelId = req.body.modelId;
+    const parsedJSON = await OpenAIService.parseResumeText(resumeText, modelId);
     
     // Save imported resume to MongoDB
     const resumeDoc = new Resume({

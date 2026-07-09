@@ -1,17 +1,30 @@
 import { useResumeStore } from '../../store/resumeStore';
 import { ThemeToggle } from '../common/ThemeToggle';
-import { RotateCcw, Undo2, Redo2, Sparkles, FolderOpen } from 'lucide-react';
+import { RotateCcw, Undo2, Redo2, Sparkles, FolderOpen, ChevronDown } from 'lucide-react';
+
+const AI_MODELS = [
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'poolside/laguna-m.1:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'cohere/north-mini-code:free',
+  'poolside/laguna-xs-2.1:free',
+  'openai/gpt-oss-120b:free',
+  'gpt-4o-mini',
+  'gemini-2.5-flash'
+];
 
 export const Header = () => {
-  const { 
-    undo, 
-    redo, 
-    canUndo, 
-    canRedo, 
+  const {
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     resetResume,
     currentView,
     setView,
-    resume
+    resume,
+    selectedModel,
+    setSelectedModel
   } = useResumeStore();
 
   const handleReset = () => {
@@ -21,7 +34,7 @@ export const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-card/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-card/80 backdrop-blur-md px-6 py-4 flex items-center justify-between no-print">
       {/* Brand Logo */}
       <div className="flex items-center gap-3">
         <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -48,7 +61,7 @@ export const Header = () => {
             <FolderOpen className="h-3.5 w-3.5 text-indigo-500" />
             <span>Dashboard</span>
           </button>
-          
+
           <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 text-xs font-medium">
             <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
             <span>Editing: <strong className="font-semibold">{resume.personalInfo.fullName || 'Untitled'}</strong></span>
@@ -63,6 +76,25 @@ export const Header = () => {
 
       {/* Control Actions */}
       <div className="flex items-center gap-4">
+
+        {/* Model Selector */}
+        <div className="flex items-center gap-2 text-sm relative">
+          <label htmlFor="model-select" className="text-muted-foreground text-xs font-medium">Model:</label>
+          <div className="relative">
+            <select
+              id="model-select"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="appearance-none bg-secondary border border-border rounded-lg pl-3 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-foreground"
+            >
+              {AI_MODELS.map(model => (
+                <option key={model} value={model}>{model.split('/')[1] || model}</option>
+              ))}
+            </select>
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        </div>
+
         {/* Undo/Redo Group */}
         <div className="flex items-center bg-secondary rounded-lg border border-border p-1">
           <button

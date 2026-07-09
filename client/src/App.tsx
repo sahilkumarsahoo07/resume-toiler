@@ -58,12 +58,12 @@ function App() {
       ) : (
         <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-0">
           {/* Left Column: Job Description Input */}
-          <section className="lg:col-span-3 h-full min-h-0">
+          <section className="lg:col-span-3 h-full min-h-0 no-print">
             <LeftPanel />
           </section>
 
           {/* Middle Column: AI Suggestions & ATS metrics */}
-          <section className="lg:col-span-4 h-full min-h-0">
+          <section className="lg:col-span-4 h-full min-h-0 no-print">
             <MiddlePanel />
           </section>
 
