@@ -18,9 +18,23 @@ export class ApiService {
     
     // If response is HTML or text (e.g. Render 502/504 Gateway pages)
     const text = await res.text();
-    // Simple HTML tags removal to get a readable string
     const cleanText = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     throw new Error(cleanText.substring(0, 150) || `Server error (${res.status}): ${defaultMessage}`);
+  }
+
+  private static async responseJson(res: Response, defaultMessage: string): Promise<any> {
+    if (!res.ok) {
+      await this.handleError(res, defaultMessage);
+    }
+    
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await res.text();
+      const cleanText = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      throw new Error(`Invalid response format from server (expected JSON). Make sure VITE_API_URL is set correctly. Response preview: ${cleanText.substring(0, 150)}`);
+    }
+    
+    return await res.json();
   }
 
   /**
@@ -33,11 +47,7 @@ export class ApiService {
       body: JSON.stringify({ jdText, modelId })
     });
     
-    if (!res.ok) {
-      await this.handleError(res, 'Failed to analyze Job Description');
-    }
-    
-    return await res.json();
+    return await this.responseJson(res, 'Failed to analyze Job Description');
   }
 
   /**
@@ -50,11 +60,7 @@ export class ApiService {
       body: JSON.stringify({ resume, jdAnalysis, modelId })
     });
 
-    if (!res.ok) {
-      await this.handleError(res, 'Failed to compare resume');
-    }
-
-    return await res.json();
+    return await this.responseJson(res, 'Failed to compare resume');
   }
 
   /**
@@ -67,11 +73,7 @@ export class ApiService {
       body: JSON.stringify({ resume, selectedSuggestions, modelId })
     });
 
-    if (!res.ok) {
-      await this.handleError(res, 'Failed to apply suggestions');
-    }
-
-    const data = await res.json();
+    const data = await this.responseJson(res, 'Failed to apply suggestions');
     return data.updatedResume;
   }
 
@@ -80,10 +82,7 @@ export class ApiService {
    */
   static async listResumes(): Promise<Array<{ _id: string; fileName: string; fullName: string; updatedAt: string }>> {
     const res = await fetch(`${API_BASE}/resumes`);
-    if (!res.ok) {
-      await this.handleError(res, 'Failed to list resumes');
-    }
-    return await res.json();
+    return await this.responseJson(res, 'Failed to list resumes');
   }
 
   /**
@@ -91,10 +90,7 @@ export class ApiService {
    */
   static async getResume(id: string): Promise<ResumeJSON> {
     const res = await fetch(`${API_BASE}/resumes/${id}`);
-    if (!res.ok) {
-      await this.handleError(res, 'Failed to fetch resume');
-    }
-    return await res.json();
+    return await this.responseJson(res, 'Failed to fetch resume');
   }
 
   /**
@@ -106,10 +102,7 @@ export class ApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(resume)
     });
-    if (!res.ok) {
-      await this.handleError(res, 'Failed to update resume');
-    }
-    const data = await res.json();
+    const data = await this.responseJson(res, 'Failed to update resume');
     return data.updatedResume;
   }
 
@@ -174,10 +167,6 @@ export class ApiService {
       body: formData
     });
 
-    if (!res.ok) {
-      await this.handleError(res, 'Failed to import and parse PDF resume');
-    }
-
-    return await res.json();
+    return await this.responseJson(res, 'Failed to import and parse PDF resume');
   }
 }
